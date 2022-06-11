@@ -4,7 +4,7 @@
 * nrf_libuarte_drv – a low level UARTE driver, with extended functionality like a continuous counting of received bytes, double buffering, optional events for starting and stopping receiver, and an optional task that can be triggered when the receiver is started and stopped.
 * nrf_libuarte_async – a library suitable for receiving and transmitting asynchronous packets. It manages the receive buffers and implements the receiver inactivity timeout. The library is using nrf_libuarte. It is meant to be used in a typical UART use case, in which the counterparty is asynchronously sending packets of variable length. In such case, user gets an event on packet boundary (that is, on timeout) and whenever the DMA buffer is full.
 
-![](/Image/nRF connect.jpg)  
+![](/Image/nRF_connect.jpg)  
 
 ### 更新记录
 22.06.11  
@@ -13,7 +13,7 @@
 暂时屏蔽了DFU.  
 修改蓝牙设备名称：SeerLikeJazz  
 
-![](/Image/nRF connect.jpg)  
+![](/Image/Speed.png)  
 
 22.03.01  
 基于examples\ble_peripheral\ble_app_uart的例程修改.  
