@@ -104,7 +104,7 @@
 #include "nrf_libuarte_async.h"
 #include "nrf_queue.h"
 
-NRF_LIBUARTE_ASYNC_DEFINE(libuarte, 0, 1, 2, NRF_LIBUARTE_PERIPHERAL_NOT_USED, 255, 3);
+NRF_LIBUARTE_ASYNC_DEFINE(libuarte, 0, 1, 2, NRF_LIBUARTE_PERIPHERAL_NOT_USED, 157, 3);
 static uint8_t text[] = "UART example started.\r\n Loopback:\r\n";
 static uint8_t text_size = sizeof(text);
 static volatile bool m_loopback_phase;
@@ -177,6 +177,15 @@ uint8_t m_data_array[6300];
 uint32_t m_len_sent;
 uint32_t m_cnt_7ms;
 
+/**
+**liuzhaoxu code
+**/
+uint8_t uart_array[6300];
+uint8_t m_uart_cnt;
+uint8_t CCCD_flag;
+APP_TIMER_DEF(second_timer);
+
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -193,7 +202,8 @@ void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
-
+buffer_t abuf;
+static uint8_t aval = 0;
 void uart_event_handler(void * context, nrf_libuarte_async_evt_t * p_evt)
 {
 
@@ -207,16 +217,29 @@ void uart_event_handler(void * context, nrf_libuarte_async_evt_t * p_evt)
         case NRF_LIBUARTE_ASYNC_EVT_ERROR:
             bsp_board_led_invert(0);
             break;
-        case NRF_LIBUARTE_ASYNC_EVT_RX_DATA:
-//						if(CCCD_Flag) {
-//                buffer_t buf = {
-//                    .p_data = p_evt->data.rxtx.p_data,
-//                    .length = p_evt->data.rxtx.length,
-//                };
-//								err_code = nrf_queue_push(&m_buf_queue, &buf);
-////								NRF_LOG_INFO("push ret is %d ,queue_utilization is %d", err_code, nrf_queue_utilization_get(&m_buf_queue));
-//                APP_ERROR_CHECK(err_code);						
-//						}
+        case NRF_LIBUARTE_ASYNC_EVT_RX_DATA:	
+					if(CCCD_flag){	
+						memcpy(&(uart_array[m_uart_cnt*210+1]), p_evt->data.rxtx.p_data, p_evt->data.rxtx.length);
+						//put the data into a queue to cache them
+						uart_array[m_uart_cnt*210] = aval++;
+						abuf.p_data = &uart_array[m_uart_cnt*210];
+						abuf.length = p_evt->data.rxtx.length;
+						err_code = nrf_queue_push(&m_buf_queue, &abuf);
+						//APP_ERROR_CHECK(err_code);	//it may return NRF_ERROR_NO_MEM. we skip this error
+				
+						ble_data_send_with_queue();
+						
+						if(err_code == NRF_ERROR_NO_MEM)
+						{
+							NRF_LOG_INFO("Drop");	
+						}				
+				
+						m_uart_cnt++;
+						if(m_uart_cnt == 30){
+							m_uart_cnt = 0;
+						}
+					}
+							
 						nrf_libuarte_async_rx_free(p_libuarte, p_evt->data.rxtx.p_data, p_evt->data.rxtx.length);	
             break;
         case NRF_LIBUARTE_ASYNC_EVT_TX_DONE:
@@ -328,7 +351,9 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
     }
 		else if (p_evt->type == BLE_NUS_EVT_COMM_STARTED)
 		{
-			APP_ERROR_CHECK(app_timer_start(m_timer_speed, APP_TIMER_TICKS(7),NULL));			
+//			APP_ERROR_CHECK(app_timer_start(m_timer_speed, APP_TIMER_TICKS(7),NULL));	
+			CCCD_flag = 1;
+			APP_ERROR_CHECK(app_timer_start(second_timer, APP_TIMER_TICKS(1000),NULL));			
 		}
 		else if (p_evt->type == BLE_NUS_EVT_TX_RDY)
 		{
@@ -544,7 +569,9 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             NRF_LOG_INFO("Disconnected");
             // LED indication will be changed when advertising starts.
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
-						APP_ERROR_CHECK(app_timer_stop(m_timer_speed));	
+//						APP_ERROR_CHECK(app_timer_stop(m_timer_speed));	
+						APP_ERROR_CHECK(app_timer_stop(second_timer));
+						CCCD_flag = 0;
 						m_len_sent = 0;
 						m_cnt_7ms = 0;
             break;
@@ -1027,7 +1054,6 @@ static void throughput_timer_handler(void * p_context)
 	if (m_cnt_7ms == 143)
 	{
 		NRF_LOG_INFO("==**Speed: %d B/s**==", m_len_sent);
-		m_cnt_7ms = 0;
 		m_len_sent = 0;
 	}	
 }
@@ -1036,6 +1062,23 @@ void throughput_test()
 {
 	ret_code_t err_code;
 	err_code = app_timer_create(&m_timer_speed, APP_TIMER_MODE_REPEATED, throughput_timer_handler);
+	APP_ERROR_CHECK(err_code);
+}
+
+/**
+**liuzhaoxu code
+**/
+static void second_timer_handler(void * p_context)
+{
+		NRF_LOG_INFO("==**Speed: %d B/s**==", m_len_sent);
+		m_cnt_7ms = 0;
+		m_len_sent = 0;
+}
+
+void second_test()
+{
+	ret_code_t err_code;
+	err_code = app_timer_create(&second_timer, APP_TIMER_MODE_REPEATED, second_timer_handler);
 	APP_ERROR_CHECK(err_code);
 }
 
@@ -1055,7 +1098,7 @@ int main(void)
     nrf_libuarte_async_config_t nrf_libuarte_async_config = {
             .tx_pin     = TX_PIN_NUMBER,
             .rx_pin     = RX_PIN_NUMBER,
-            .baudrate   = NRF_UARTE_BAUDRATE_921600,
+            .baudrate   = NRF_UARTE_BAUDRATE_460800,
             .parity     = NRF_UARTE_PARITY_EXCLUDED,
             .hwfc       = NRF_UARTE_HWFC_DISABLED,
             .timeout_us = 100,
@@ -1087,7 +1130,8 @@ int main(void)
     NRF_LOG_INFO("Debug logging for UART over RTT started.");
     advertising_start(erase_bonds);
 
-		throughput_test();
+//		throughput_test();
+		second_test();
     // Enter main loop.
     for (;;)
     {
